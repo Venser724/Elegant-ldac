@@ -7,4 +7,13 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    val Blue10 = Color(0xFFE3F2FD)
+    val Blue30= Color(0xFF0099FF)
+    val Blue60 = Color(0xFF0D47A1)
+    val Blue80 = Color(0xFF003366)
+    <color name = "blue10">#FFE3F2FD</color>
+    <color name = "blue30">#FF0099FF</color>
+    <color name = "blue60">#FF0D47A1</color>
+    <color name = "blue80">#FF003366</color>
+
 </resources>
