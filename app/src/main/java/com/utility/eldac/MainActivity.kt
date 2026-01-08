@@ -32,7 +32,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -115,7 +114,7 @@ fun DeviceHeaderCard() {
                         fontSize = 14.sp
                     )
                     Text(
-                        "Sony WH-1000XM5",
+                        text = BackgroundServices.deviceName,
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
@@ -138,15 +137,18 @@ fun DeviceHeaderCard() {
             Row {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Signal Strength",
+                        text = "Signal Strength",
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 14.sp
                     )
-                    Text("Excellent", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = BackgroundServices.signalLvl,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold)
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Battery", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-                    Text("85%", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(text = "${BackgroundServices.deviceBatteryLvl} %", color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -254,7 +256,7 @@ fun LdacSelectionGroup(
         Text(label, style = MaterialTheme.typography.labelMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             options.forEach { option ->
-                val isSelected = option == selectedOption
+                var isSelected = option == selectedOption
                 Button(
                     onClick = { onOptionSelected(option) },
                     colors = ButtonDefaults.buttonColors(
@@ -324,3 +326,4 @@ fun LdacSamplingRateSelectionGroup(
         }
     }
 }
+
