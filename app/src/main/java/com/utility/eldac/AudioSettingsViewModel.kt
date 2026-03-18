@@ -31,12 +31,20 @@ data class DeviceState(
     val isConnected: Boolean = false
 )
 
+data class DiagnosticInfo(
+    val requested: AudioSettings,
+    val actualCodec: LdacCodecManager.CurrentCodecInfo?,
+    val apiCallResult: String,
+    val isAssociated: Boolean,
+    val deviceName: String
+)
+
 sealed class ApplyStatus {
     data object Idle : ApplyStatus()
     data object Applying : ApplyStatus()
     data class Success(val message: String) : ApplyStatus()
     data class Error(val message: String) : ApplyStatus()
-    data class PermissionRequired(val message: String) : ApplyStatus()
+    data class Failed(val diagnostic: DiagnosticInfo) : ApplyStatus()
 }
 
 class AudioSettingsViewModel(
@@ -75,30 +83,39 @@ class AudioSettingsViewModel(
             return
         }
 
+        val desired = audioSettings.value
+        val isAssociated = bluetoothViewModel.isAssociated.value
+        val deviceName = bluetoothViewModel.deviceState.value.name
+
         _applyStatus.value = ApplyStatus.Applying
         viewModelScope.launch {
-            val result = codecManager.applySettings(a2dp, device, audioSettings.value)
-            when (result) {
-                is LdacCodecManager.Result.Success -> {
-                    readCurrentCodec(bluetoothViewModel)
-                    val info = _currentCodecInfo.value
-                    val desired = audioSettings.value
-                    if (info != null && info.isLdac &&
-                        info.bitRate == desired.bitRate &&
-                        info.sampleRate == desired.samplingRate &&
-                        info.bitsPerSample == desired.bitDepth
-                    ) {
-                        _applyStatus.value = ApplyStatus.Success("LDAC settings applied")
-                    } else {
-                        _applyStatus.value = ApplyStatus.PermissionRequired(
-                            "Settings were not applied. Use Developer Options to change codec manually."
-                        )
-                    }
-                }
-                is LdacCodecManager.Result.Error ->
-                    _applyStatus.value = ApplyStatus.Error(result.message)
-                is LdacCodecManager.Result.PermissionRequired ->
-                    _applyStatus.value = ApplyStatus.PermissionRequired(result.message)
+            val result = codecManager.applySettings(a2dp, device, desired)
+            val apiCallResult = when (result) {
+                is LdacCodecManager.Result.Success -> "OK (no exception)"
+                is LdacCodecManager.Result.Error -> "Error: ${result.message}"
+                is LdacCodecManager.Result.PermissionRequired -> "SecurityException: ${result.message}"
+            }
+
+            readCurrentCodec(bluetoothViewModel)
+            val actualCodec = _currentCodecInfo.value
+
+            val settingsMatch = actualCodec != null && actualCodec.isLdac &&
+                actualCodec.bitRate == desired.bitRate &&
+                actualCodec.sampleRate == desired.samplingRate &&
+                actualCodec.bitsPerSample == desired.bitDepth
+
+            if (result is LdacCodecManager.Result.Success && settingsMatch) {
+                _applyStatus.value = ApplyStatus.Success("LDAC settings applied")
+            } else {
+                _applyStatus.value = ApplyStatus.Failed(
+                    DiagnosticInfo(
+                        requested = desired,
+                        actualCodec = actualCodec,
+                        apiCallResult = apiCallResult,
+                        isAssociated = isAssociated,
+                        deviceName = deviceName
+                    )
+                )
             }
         }
     }

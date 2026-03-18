@@ -144,25 +144,16 @@ fun EldacApp(
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(applyStatus) {
-        val message = when (val status = applyStatus) {
-            is ApplyStatus.Success -> status.message
-            is ApplyStatus.Error -> status.message
-            is ApplyStatus.PermissionRequired -> status.message
-            else -> null
-        }
-        if (message != null) {
-            val result = snackbarHostState.showSnackbar(
-                message = message,
-                actionLabel = if (applyStatus is ApplyStatus.PermissionRequired) {
-                    "Dev Options"
-                } else {
-                    null
-                }
-            )
-            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                context.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+        when (val status = applyStatus) {
+            is ApplyStatus.Success -> {
+                snackbarHostState.showSnackbar(status.message)
+                audioViewModel.clearApplyStatus()
             }
-            audioViewModel.clearApplyStatus()
+            is ApplyStatus.Error -> {
+                snackbarHostState.showSnackbar(status.message)
+                audioViewModel.clearApplyStatus()
+            }
+            else -> { }
         }
     }
 
@@ -204,6 +195,18 @@ fun EldacApp(
                     isApplying = applyStatus is ApplyStatus.Applying,
                     onApply = { audioViewModel.applySettings(bluetoothViewModel) }
                 )
+                val failedStatus = applyStatus as? ApplyStatus.Failed
+                if (failedStatus != null) {
+                    DiagnosticCard(
+                        diagnostic = failedStatus.diagnostic,
+                        onOpenDevOptions = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+                            )
+                        },
+                        onDismiss = { audioViewModel.clearApplyStatus() }
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
@@ -513,6 +516,109 @@ fun ApplySettingsButton(
             },
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp
+        )
+    }
+}
+
+@Composable
+fun DiagnosticCard(
+    diagnostic: DiagnosticInfo,
+    onOpenDevOptions: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(all = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Settings not applied",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = Color(0xFFE65100)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            DiagRow("Device", diagnostic.deviceName)
+            DiagRow("CDM Associated", if (diagnostic.isAssociated) "Yes" else "No")
+            DiagRow("API Call", diagnostic.apiCallResult)
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Requested:",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp
+            )
+            DiagRow("  Codec", "LDAC")
+            DiagRow("  Bit Rate", diagnostic.requested.bitRate)
+            DiagRow("  Bit Depth", diagnostic.requested.bitDepth)
+            DiagRow("  Sample Rate", diagnostic.requested.samplingRate)
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Actual (after apply):",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp
+            )
+            val actual = diagnostic.actualCodec
+            if (actual != null) {
+                DiagRow("  Codec", actual.codecName)
+                DiagRow("  Bit Rate", actual.bitRate)
+                DiagRow("  Bit Depth", actual.bitsPerSample)
+                DiagRow("  Sample Rate", actual.sampleRate)
+            } else {
+                DiagRow("  Status", "Could not read codec info")
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                "The API call returned OK but the system ignored the change. " +
+                        "This typically means BLUETOOTH_PRIVILEGED was not granted " +
+                        "despite CDM association. Try changing codec manually in " +
+                        "Developer Options > Bluetooth Audio Codec.",
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onOpenDevOptions,
+                    colors = ButtonDefaults.buttonColors(containerColor = Blue60),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Open Dev Options")
+                }
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Gray.copy(alpha = 0.3f),
+                        contentColor = Color.Black
+                    ),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Dismiss")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DiagRow(label: String, value: String) {
+    Row(modifier = Modifier.padding(vertical = 2.dp)) {
+        Text(
+            label,
+            fontSize = 13.sp,
+            color = Color.Gray,
+            modifier = Modifier.width(120.dp)
+        )
+        Text(
+            value,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
         )
     }
 }

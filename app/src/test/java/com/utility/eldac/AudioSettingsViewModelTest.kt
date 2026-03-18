@@ -26,9 +26,17 @@ class ApplyStatusTest {
     }
 
     @Test
-    fun permissionRequired_carriesMessage() {
-        val status = ApplyStatus.PermissionRequired("Need root")
-        assertEquals("Need root", status.message)
+    fun failed_carriesDiagnostic() {
+        val diag = DiagnosticInfo(
+            requested = AudioSettings(),
+            actualCodec = null,
+            apiCallResult = "OK (no exception)",
+            isAssociated = true,
+            deviceName = "Test"
+        )
+        val status = ApplyStatus.Failed(diag)
+        assertEquals("Test", status.diagnostic.deviceName)
+        assertTrue(status.diagnostic.isAssociated)
     }
 
     @Test
