@@ -68,9 +68,17 @@ class LdacCodecManager {
             Result.Success("LDAC settings applied successfully")
         } catch (e: SecurityException) {
             Result.PermissionRequired(
-                "Changing codec settings requires elevated privileges. " +
-                        "Enable Developer Options > Bluetooth Audio Codec, or use a rooted device."
+                "Requires BLUETOOTH_PRIVILEGED. Use Developer Options or a rooted device."
             )
+        } catch (e: java.lang.reflect.InvocationTargetException) {
+            val cause = e.cause
+            if (cause is SecurityException) {
+                Result.PermissionRequired(
+                    "Requires BLUETOOTH_PRIVILEGED. Use Developer Options or a rooted device."
+                )
+            } else {
+                Result.Error("Failed to apply: ${cause?.message ?: e.message}")
+            }
         } catch (e: Exception) {
             Result.Error("Failed to apply settings: ${e.message}")
         }

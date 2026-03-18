@@ -4,17 +4,27 @@ import android.Manifest
 import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.companion.BluetoothDeviceFilter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.companion.AssociationRequest
+import android.companion.CompanionDeviceManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 
 class BluetoothHandler(private val context: Context) {
+
+    companion object {
+        private const val ACTION_BATTERY_LEVEL_CHANGED =
+            "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED"
+        private const val EXTRA_BATTERY_LEVEL = "android.bluetooth.device.extra.BATTERY_LEVEL"
+    }
 
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var a2dpProxy: BluetoothA2dp? = null
@@ -24,6 +34,7 @@ class BluetoothHandler(private val context: Context) {
         fun onDeviceConnected(device: BluetoothDevice)
         fun onDeviceDisconnected()
         fun onA2dpReady(proxy: BluetoothA2dp)
+        fun onBatteryLevelChanged(level: Int)
     }
 
     private val a2dpServiceListener = object : BluetoothProfile.ServiceListener {
@@ -56,6 +67,12 @@ class BluetoothHandler(private val context: Context) {
                 BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                     listener?.onDeviceDisconnected()
                 }
+                ACTION_BATTERY_LEVEL_CHANGED -> {
+                    val level = intent.getIntExtra(EXTRA_BATTERY_LEVEL, -1)
+                    if (level in 0..100) {
+                        listener?.onBatteryLevelChanged(level)
+                    }
+                }
             }
         }
     }
@@ -74,6 +91,7 @@ class BluetoothHandler(private val context: Context) {
         val filter = IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(ACTION_BATTERY_LEVEL_CHANGED)
         }
         context.registerReceiver(bluetoothReceiver, filter)
     }
@@ -107,6 +125,79 @@ class BluetoothHandler(private val context: Context) {
     }
 
     fun getA2dpProxy(): BluetoothA2dp? = a2dpProxy
+
+    fun isDeviceAssociated(device: BluetoothDevice): Boolean {
+        val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE)
+                as? CompanionDeviceManager ?: return false
+        return try {
+            val address = device.address
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                cdm.myAssociations.any { it.deviceMacAddress?.toString() == address }
+            } else {
+                @Suppress("DEPRECATION")
+                cdm.associations.any { it == address }
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun requestAssociation(callback: (IntentSender) -> Unit, onError: (String) -> Unit) {
+        val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE)
+                as? CompanionDeviceManager
+        if (cdm == null) {
+            onError("CompanionDeviceManager not available")
+            return
+        }
+
+        val filter = BluetoothDeviceFilter.Builder().build()
+        val request = AssociationRequest.Builder()
+            .addDeviceFilter(filter)
+            .setSingleDevice(false)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            cdm.associate(
+                request,
+                { it.run() },
+                object : CompanionDeviceManager.Callback() {
+                    override fun onAssociationPending(intentSender: IntentSender) {
+                        callback(intentSender)
+                    }
+
+                    override fun onFailure(errorMessage: CharSequence?) {
+                        onError(errorMessage?.toString() ?: "Association failed")
+                    }
+                }
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            cdm.associate(
+                request,
+                object : CompanionDeviceManager.Callback() {
+                    @Deprecated("Deprecated in API 33")
+                    override fun onDeviceFound(intentSender: IntentSender) {
+                        callback(intentSender)
+                    }
+
+                    override fun onFailure(errorMessage: CharSequence?) {
+                        onError(errorMessage?.toString() ?: "Association failed")
+                    }
+                },
+                null
+            )
+        }
+    }
+
+    fun getBatteryLevel(device: BluetoothDevice): Int {
+        return try {
+            val method = BluetoothDevice::class.java.getMethod("getBatteryLevel")
+            val level = method.invoke(device) as Int
+            if (level in 0..100) level else -1
+        } catch (e: Exception) {
+            -1
+        }
+    }
 
     private fun updateConnectedDevice() {
         val device = getConnectedA2dpDevice()

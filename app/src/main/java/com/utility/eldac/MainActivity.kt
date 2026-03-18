@@ -1,10 +1,13 @@
 package com.utility.eldac
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -69,6 +72,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val associationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            audioViewModel.clearApplyStatus()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -92,7 +103,17 @@ class MainActivity : ComponentActivity() {
             ElegantLDACTheme {
                 EldacApp(
                     audioViewModel = audioViewModel,
-                    bluetoothViewModel = bluetoothViewModel
+                    bluetoothViewModel = bluetoothViewModel,
+                    onAssociateDevice = {
+                        bluetoothViewModel.requestAssociation(
+                            onIntentSender = { sender ->
+                                associationLauncher.launch(
+                                    IntentSenderRequest.Builder(sender).build()
+                                )
+                            },
+                            onError = { /* handled via snackbar */ }
+                        )
+                    }
                 )
             }
         }
@@ -111,13 +132,17 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun EldacApp(
     audioViewModel: AudioSettingsViewModel,
-    bluetoothViewModel: BluetoothViewModel
+    bluetoothViewModel: BluetoothViewModel,
+    onAssociateDevice: () -> Unit = {}
 ) {
+    val isAssociated = bluetoothViewModel.isDeviceAssociated()
     val audioSettings by audioViewModel.audioSettings.collectAsState()
     val deviceState by bluetoothViewModel.deviceState.collectAsState()
     val applyStatus by audioViewModel.applyStatus.collectAsState()
     val codecInfo by audioViewModel.currentCodecInfo.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(applyStatus) {
         val message = when (val status = applyStatus) {
@@ -127,7 +152,17 @@ fun EldacApp(
             else -> null
         }
         if (message != null) {
-            snackbarHostState.showSnackbar(message)
+            val result = snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = if (applyStatus is ApplyStatus.PermissionRequired) {
+                    "Dev Options"
+                } else {
+                    null
+                }
+            )
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                context.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+            }
             audioViewModel.clearApplyStatus()
         }
     }
@@ -161,8 +196,12 @@ fun EldacApp(
                     onBitDepthSelected = audioViewModel::selectBitDepth,
                     onSamplingRateSelected = audioViewModel::selectSamplingRate
                 )
+                if (deviceState.isConnected && !isAssociated) {
+                    AssociateDeviceButton(onAssociate = onAssociateDevice)
+                }
                 ApplySettingsButton(
                     isConnected = deviceState.isConnected,
+                    isAssociated = isAssociated,
                     isApplying = applyStatus is ApplyStatus.Applying,
                     onApply = { audioViewModel.applySettings(bluetoothViewModel) }
                 )
@@ -422,14 +461,38 @@ fun AudioParametersCard(
 }
 
 @Composable
+fun AssociateDeviceButton(onAssociate: () -> Unit) {
+    Button(
+        onClick = onAssociate,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Blue60,
+            contentColor = Color.White
+        ),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+        Text(
+            text = "Associate Device (required to change codec)",
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
+        )
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+}
+
+@Composable
 fun ApplySettingsButton(
     isConnected: Boolean,
+    isAssociated: Boolean,
     isApplying: Boolean,
     onApply: () -> Unit
 ) {
     Button(
         onClick = onApply,
-        enabled = isConnected && !isApplying,
+        enabled = isConnected && isAssociated && !isApplying,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp),
@@ -446,6 +509,7 @@ fun ApplySettingsButton(
             text = when {
                 isApplying -> "Applying..."
                 !isConnected -> "Connect a device to apply"
+                !isAssociated -> "Associate device first"
                 else -> "Apply LDAC Settings"
             },
             fontWeight = FontWeight.Bold,

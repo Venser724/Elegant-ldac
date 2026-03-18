@@ -3,6 +3,7 @@ package com.utility.eldac
 import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothDevice
 import android.content.Context
+import android.content.IntentSender
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,18 @@ class BluetoothViewModel(context: Context) : ViewModel(),
 
     fun getA2dpProxy(): BluetoothA2dp? = bluetoothHandler.getA2dpProxy()
 
+    fun isDeviceAssociated(): Boolean {
+        val device = connectedDevice ?: return false
+        return bluetoothHandler.isDeviceAssociated(device)
+    }
+
+    fun requestAssociation(
+        onIntentSender: (IntentSender) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        bluetoothHandler.requestAssociation(onIntentSender, onError)
+    }
+
     fun getConnectedDevice(): BluetoothDevice? = connectedDevice
 
     fun setOnDeviceConnectedCallback(callback: () -> Unit) {
@@ -51,9 +64,11 @@ class BluetoothViewModel(context: Context) : ViewModel(),
             "Unknown Device"
         }
 
+        val batteryLevel = bluetoothHandler.getBatteryLevel(device)
+
         _deviceState.value = DeviceState(
             name = deviceName,
-            batteryLevel = 0,
+            batteryLevel = if (batteryLevel >= 0) batteryLevel else 0,
             signalStrength = "Good",
             isConnected = true
         )
@@ -64,6 +79,10 @@ class BluetoothViewModel(context: Context) : ViewModel(),
         connectedDevice = null
         _deviceState.value = DeviceState()
         onDeviceConnectedCallback?.invoke()
+    }
+
+    override fun onBatteryLevelChanged(level: Int) {
+        _deviceState.value = _deviceState.value.copy(batteryLevel = level)
     }
 
     override fun onA2dpReady(proxy: BluetoothA2dp) {
