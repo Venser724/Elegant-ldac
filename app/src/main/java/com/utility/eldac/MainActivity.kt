@@ -571,7 +571,7 @@ fun DiagnosticCard(
                 DiagRow("  Bit Depth", actual.bitsPerSample)
                 DiagRow("  Sample Rate", actual.sampleRate)
             } else {
-                DiagRow("  Status", "Could not read codec info")
+                DiagRow("  Read Error", diagnostic.codecReadError ?: "unknown")
             }
 
             Spacer(modifier = Modifier.height(12.dp))

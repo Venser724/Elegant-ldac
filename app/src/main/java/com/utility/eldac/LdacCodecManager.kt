@@ -45,15 +45,24 @@ class LdacCodecManager {
         val isLdac: Boolean
     )
 
-    fun readCurrentCodec(a2dp: BluetoothA2dp, device: BluetoothDevice): CurrentCodecInfo? {
+    data class CodecReadResult(
+        val info: CurrentCodecInfo? = null,
+        val error: String? = null
+    )
+
+    fun readCurrentCodec(a2dp: BluetoothA2dp, device: BluetoothDevice): CodecReadResult {
         return try {
-            val status = getCodecStatus(a2dp, device) ?: return null
-            val config = status.codecConfig ?: return null
-            parseCodecConfig(config)
-        } catch (e: SecurityException) {
-            null
+            val statusResult = getCodecStatus(a2dp, device)
+            if (statusResult.second != null) {
+                return CodecReadResult(error = statusResult.second)
+            }
+            val status = statusResult.first
+                ?: return CodecReadResult(error = "getCodecStatus returned null (no error)")
+            val config = status.codecConfig
+                ?: return CodecReadResult(error = "codecConfig is null inside CodecStatus")
+            CodecReadResult(info = parseCodecConfig(config))
         } catch (e: Exception) {
-            null
+            CodecReadResult(error = "${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
@@ -87,15 +96,23 @@ class LdacCodecManager {
     private fun getCodecStatus(
         a2dp: BluetoothA2dp,
         device: BluetoothDevice
-    ): BluetoothCodecStatus? {
+    ): Pair<BluetoothCodecStatus?, String?> {
         return try {
             val method = BluetoothA2dp::class.java.getMethod(
                 "getCodecStatus",
                 BluetoothDevice::class.java
             )
-            method.invoke(a2dp, device) as? BluetoothCodecStatus
+            val result = method.invoke(a2dp, device)
+            if (result == null) {
+                Pair(null, null)
+            } else {
+                Pair(result as BluetoothCodecStatus, null)
+            }
+        } catch (e: java.lang.reflect.InvocationTargetException) {
+            val cause = e.cause
+            Pair(null, "InvocationTarget: ${cause?.javaClass?.simpleName}: ${cause?.message}")
         } catch (e: Exception) {
-            null
+            Pair(null, "${e.javaClass.simpleName}: ${e.message}")
         }
     }
 

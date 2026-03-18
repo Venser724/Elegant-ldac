@@ -34,6 +34,7 @@ data class DeviceState(
 data class DiagnosticInfo(
     val requested: AudioSettings,
     val actualCodec: LdacCodecManager.CurrentCodecInfo?,
+    val codecReadError: String?,
     val apiCallResult: String,
     val isAssociated: Boolean,
     val deviceName: String,
@@ -58,6 +59,8 @@ class AudioSettingsViewModel(
 
     private val _applyStatus = MutableStateFlow<ApplyStatus>(ApplyStatus.Idle)
     val applyStatus: StateFlow<ApplyStatus> = _applyStatus.asStateFlow()
+
+    private val _codecReadResult = MutableStateFlow(LdacCodecManager.CodecReadResult())
 
     private val _currentCodecInfo = MutableStateFlow<LdacCodecManager.CurrentCodecInfo?>(null)
     val currentCodecInfo: StateFlow<LdacCodecManager.CurrentCodecInfo?> =
@@ -99,7 +102,8 @@ class AudioSettingsViewModel(
             }
 
             readCurrentCodec(bluetoothViewModel)
-            val actualCodec = _currentCodecInfo.value
+            val readResult = _codecReadResult.value
+            val actualCodec = readResult.info
 
             val settingsMatch = actualCodec != null && actualCodec.isLdac &&
                 actualCodec.bitRate == desired.bitRate &&
@@ -113,6 +117,7 @@ class AudioSettingsViewModel(
                     DiagnosticInfo(
                         requested = desired,
                         actualCodec = actualCodec,
+                        codecReadError = readResult.error,
                         apiCallResult = apiCallResult,
                         isAssociated = isAssociated,
                         deviceName = deviceName,
@@ -127,8 +132,11 @@ class AudioSettingsViewModel(
         val a2dp = bluetoothViewModel.getA2dpProxy()
         val device = bluetoothViewModel.getConnectedDevice()
         if (a2dp != null && device != null) {
-            _currentCodecInfo.value = codecManager.readCurrentCodec(a2dp, device)
+            val result = codecManager.readCurrentCodec(a2dp, device)
+            _codecReadResult.value = result
+            _currentCodecInfo.value = result.info
         } else {
+            _codecReadResult.value = LdacCodecManager.CodecReadResult(error = "No A2DP proxy or device")
             _currentCodecInfo.value = null
         }
     }
