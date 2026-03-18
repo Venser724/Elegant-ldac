@@ -110,14 +110,14 @@ class AudioSettingsViewModel(
                 actualCodec.sampleRate == desired.samplingRate &&
                 actualCodec.bitsPerSample == desired.bitDepth
 
-            val readBlocked = readResult.error?.contains("SecurityException") == true
+            val readFailed = readResult.error != null
             val applyOk = result is LdacCodecManager.Result.Success
 
             if (applyOk && settingsMatch) {
                 _applyStatus.value = ApplyStatus.Success("LDAC settings applied")
-            } else if (applyOk && readBlocked) {
+            } else if (applyOk && readFailed) {
                 _applyStatus.value = ApplyStatus.Success(
-                    "Settings sent to device. Cannot verify (no read permission)."
+                    "LDAC settings applied (codec readback unavailable)"
                 )
             } else {
                 _applyStatus.value = ApplyStatus.Failed(
