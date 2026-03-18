@@ -256,7 +256,7 @@ fun LdacSelectionGroup(
         Text(label, style = MaterialTheme.typography.labelMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             options.forEach { option ->
-                var isSelected = option == selectedOption
+                val isSelected = option == selectedOption
                 Button(
                     onClick = { onOptionSelected(option) },
                     colors = ButtonDefaults.buttonColors(
@@ -277,7 +277,7 @@ fun LdacBitrateSelectionGroup(
     label: String,
     options: List<String>,
     selectedOption: String,
-    onOptionSelected: () -> Unit
+    onOptionSelected: (String) -> Unit
 ) {
     Column {
         Text(label, style = MaterialTheme.typography.labelMedium)
@@ -285,7 +285,7 @@ fun LdacBitrateSelectionGroup(
             options.forEach { option ->
                 val isSelected = option == selectedOption
                 Button(
-                    onClick = { onOptionSelected() },
+                    onClick = { onOptionSelected(option) },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isSelected) Blue60 else Blue30,
                         contentColor = if (isSelected) Color.White else Black
