@@ -21,6 +21,9 @@ class BluetoothViewModel(context: Context) : ViewModel(),
     private val _isBluetoothReady = MutableStateFlow(false)
     val isBluetoothReady: StateFlow<Boolean> = _isBluetoothReady.asStateFlow()
 
+    private val _isAssociated = MutableStateFlow(false)
+    val isAssociated: StateFlow<Boolean> = _isAssociated.asStateFlow()
+
     private var connectedDevice: BluetoothDevice? = null
     private var onDeviceConnectedCallback: (() -> Unit)? = null
 
@@ -38,9 +41,13 @@ class BluetoothViewModel(context: Context) : ViewModel(),
 
     fun getA2dpProxy(): BluetoothA2dp? = bluetoothHandler.getA2dpProxy()
 
-    fun isDeviceAssociated(): Boolean {
-        val device = connectedDevice ?: return false
-        return bluetoothHandler.isDeviceAssociated(device)
+    fun refreshAssociationState() {
+        val device = connectedDevice
+        _isAssociated.value = if (device != null) {
+            bluetoothHandler.isDeviceAssociated(device)
+        } else {
+            false
+        }
     }
 
     fun requestAssociation(
@@ -72,11 +79,13 @@ class BluetoothViewModel(context: Context) : ViewModel(),
             signalStrength = "Good",
             isConnected = true
         )
+        refreshAssociationState()
         onDeviceConnectedCallback?.invoke()
     }
 
     override fun onDeviceDisconnected() {
         connectedDevice = null
+        _isAssociated.value = false
         _deviceState.value = DeviceState()
         onDeviceConnectedCallback?.invoke()
     }

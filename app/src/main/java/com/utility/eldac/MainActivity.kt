@@ -76,6 +76,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
+            bluetoothViewModel.refreshAssociationState()
             audioViewModel.clearApplyStatus()
         }
     }
@@ -135,7 +136,7 @@ fun EldacApp(
     bluetoothViewModel: BluetoothViewModel,
     onAssociateDevice: () -> Unit = {}
 ) {
-    val isAssociated = bluetoothViewModel.isDeviceAssociated()
+    val isAssociated by bluetoothViewModel.isAssociated.collectAsState()
     val audioSettings by audioViewModel.audioSettings.collectAsState()
     val deviceState by bluetoothViewModel.deviceState.collectAsState()
     val applyStatus by audioViewModel.applyStatus.collectAsState()
