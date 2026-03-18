@@ -130,12 +130,14 @@ class BluetoothHandler(private val context: Context) {
         val cdm = context.getSystemService(Context.COMPANION_DEVICE_SERVICE)
                 as? CompanionDeviceManager ?: return false
         return try {
-            val address = device.address
+            val address = device.address.uppercase()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                cdm.myAssociations.any { it.deviceMacAddress?.toString() == address }
+                cdm.myAssociations.any {
+                    it.deviceMacAddress?.toString()?.uppercase() == address
+                }
             } else {
                 @Suppress("DEPRECATION")
-                cdm.associations.any { it == address }
+                cdm.associations.any { it.uppercase() == address }
             }
         } catch (e: Exception) {
             false

@@ -74,11 +74,9 @@ class MainActivity : ComponentActivity() {
 
     private val associationLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            bluetoothViewModel.refreshAssociationState()
-            audioViewModel.clearApplyStatus()
-        }
+    ) {
+        bluetoothViewModel.refreshAssociationState()
+        audioViewModel.clearApplyStatus()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
