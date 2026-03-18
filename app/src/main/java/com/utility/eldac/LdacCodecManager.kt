@@ -4,7 +4,6 @@ import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothCodecConfig
 import android.bluetooth.BluetoothCodecStatus
 import android.bluetooth.BluetoothDevice
-import android.os.Build
 
 class LdacCodecManager {
 
@@ -15,6 +14,21 @@ class LdacCodecManager {
         const val LDAC_QUALITY_MID = 1001L
         const val LDAC_QUALITY_LOW = 1002L
         const val LDAC_QUALITY_ABR = 1003L
+
+        // BluetoothCodecConfig constants (duplicated to avoid SDK visibility issues)
+        const val SAMPLE_RATE_44100 = 0x01
+        const val SAMPLE_RATE_48000 = 0x02
+        const val SAMPLE_RATE_88200 = 0x04
+        const val SAMPLE_RATE_96000 = 0x08
+        const val SAMPLE_RATE_176400 = 0x10
+        const val SAMPLE_RATE_192000 = 0x20
+
+        const val BITS_PER_SAMPLE_16 = 0x01
+        const val BITS_PER_SAMPLE_24 = 0x02
+        const val BITS_PER_SAMPLE_32 = 0x04
+
+        const val CHANNEL_MODE_STEREO = 0x02
+        const val CODEC_PRIORITY_HIGHEST = 1_000_000
     }
 
     sealed class Result {
@@ -66,18 +80,14 @@ class LdacCodecManager {
         a2dp: BluetoothA2dp,
         device: BluetoothDevice
     ): BluetoothCodecStatus? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            a2dp.getCodecStatus(device)
-        } else {
-            try {
-                val method = BluetoothA2dp::class.java.getMethod(
-                    "getCodecStatus",
-                    BluetoothDevice::class.java
-                )
-                method.invoke(a2dp, device) as? BluetoothCodecStatus
-            } catch (e: Exception) {
-                null
-            }
+        return try {
+            val method = BluetoothA2dp::class.java.getMethod(
+                "getCodecStatus",
+                BluetoothDevice::class.java
+            )
+            method.invoke(a2dp, device) as? BluetoothCodecStatus
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -86,16 +96,12 @@ class LdacCodecManager {
         device: BluetoothDevice,
         config: BluetoothCodecConfig
     ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            a2dp.setCodecConfigPreference(device, config)
-        } else {
-            val method = BluetoothA2dp::class.java.getMethod(
-                "setCodecConfigPreference",
-                BluetoothDevice::class.java,
-                BluetoothCodecConfig::class.java
-            )
-            method.invoke(a2dp, device, config)
-        }
+        val method = BluetoothA2dp::class.java.getMethod(
+            "setCodecConfigPreference",
+            BluetoothDevice::class.java,
+            BluetoothCodecConfig::class.java
+        )
+        method.invoke(a2dp, device, config)
     }
 
     private fun buildCodecConfig(settings: AudioSettings): BluetoothCodecConfig {
@@ -103,29 +109,14 @@ class LdacCodecManager {
         val bitsPerSample = mapBitsPerSample(settings.bitDepth)
         val codecSpecific1 = mapBitRate(settings.bitRate)
 
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            BluetoothCodecConfig.Builder()
-                .setCodecType(CODEC_TYPE_LDAC)
-                .setCodecPriority(BluetoothCodecConfig.CODEC_PRIORITY_HIGHEST)
-                .setSampleRate(sampleRate)
-                .setBitsPerSample(bitsPerSample)
-                .setChannelMode(BluetoothCodecConfig.CHANNEL_MODE_STEREO)
-                .setCodecSpecific1(codecSpecific1)
-                .build()
-        } else {
-            @Suppress("DEPRECATION")
-            BluetoothCodecConfig(
-                CODEC_TYPE_LDAC,
-                BluetoothCodecConfig.CODEC_PRIORITY_HIGHEST,
-                sampleRate,
-                bitsPerSample,
-                BluetoothCodecConfig.CHANNEL_MODE_STEREO,
-                codecSpecific1,
-                0L,
-                0L,
-                0L
-            )
-        }
+        return BluetoothCodecConfig.Builder()
+            .setCodecType(CODEC_TYPE_LDAC)
+            .setCodecPriority(CODEC_PRIORITY_HIGHEST)
+            .setSampleRate(sampleRate)
+            .setBitsPerSample(bitsPerSample)
+            .setChannelMode(CHANNEL_MODE_STEREO)
+            .setCodecSpecific1(codecSpecific1)
+            .build()
     }
 
     private fun parseCodecConfig(config: BluetoothCodecConfig): CurrentCodecInfo {
@@ -141,19 +132,19 @@ class LdacCodecManager {
         }
 
         val sampleRate = when (config.sampleRate) {
-            BluetoothCodecConfig.SAMPLE_RATE_44100 -> "44.1 kHz"
-            BluetoothCodecConfig.SAMPLE_RATE_48000 -> "48 kHz"
-            BluetoothCodecConfig.SAMPLE_RATE_88200 -> "88.2 kHz"
-            BluetoothCodecConfig.SAMPLE_RATE_96000 -> "96 kHz"
-            BluetoothCodecConfig.SAMPLE_RATE_176400 -> "176.4 kHz"
-            BluetoothCodecConfig.SAMPLE_RATE_192000 -> "192 kHz"
+            SAMPLE_RATE_44100 -> "44.1 kHz"
+            SAMPLE_RATE_48000 -> "48 kHz"
+            SAMPLE_RATE_88200 -> "88.2 kHz"
+            SAMPLE_RATE_96000 -> "96 kHz"
+            SAMPLE_RATE_176400 -> "176.4 kHz"
+            SAMPLE_RATE_192000 -> "192 kHz"
             else -> "Unknown"
         }
 
         val bitsPerSample = when (config.bitsPerSample) {
-            BluetoothCodecConfig.BITS_PER_SAMPLE_16 -> "16 bit"
-            BluetoothCodecConfig.BITS_PER_SAMPLE_24 -> "24 bit"
-            BluetoothCodecConfig.BITS_PER_SAMPLE_32 -> "32 bit"
+            BITS_PER_SAMPLE_16 -> "16 bit"
+            BITS_PER_SAMPLE_24 -> "24 bit"
+            BITS_PER_SAMPLE_32 -> "32 bit"
             else -> "Unknown"
         }
 
@@ -175,18 +166,18 @@ class LdacCodecManager {
     }
 
     fun mapSampleRate(displayValue: String): Int = when (displayValue) {
-        "44.1 kHz" -> BluetoothCodecConfig.SAMPLE_RATE_44100
-        "48 kHz" -> BluetoothCodecConfig.SAMPLE_RATE_48000
-        "88.2 kHz" -> BluetoothCodecConfig.SAMPLE_RATE_88200
-        "96 kHz" -> BluetoothCodecConfig.SAMPLE_RATE_96000
-        else -> BluetoothCodecConfig.SAMPLE_RATE_96000
+        "44.1 kHz" -> SAMPLE_RATE_44100
+        "48 kHz" -> SAMPLE_RATE_48000
+        "88.2 kHz" -> SAMPLE_RATE_88200
+        "96 kHz" -> SAMPLE_RATE_96000
+        else -> SAMPLE_RATE_96000
     }
 
     fun mapBitsPerSample(displayValue: String): Int = when (displayValue) {
-        "16 bit" -> BluetoothCodecConfig.BITS_PER_SAMPLE_16
-        "24 bit" -> BluetoothCodecConfig.BITS_PER_SAMPLE_24
-        "32 bit" -> BluetoothCodecConfig.BITS_PER_SAMPLE_32
-        else -> BluetoothCodecConfig.BITS_PER_SAMPLE_24
+        "16 bit" -> BITS_PER_SAMPLE_16
+        "24 bit" -> BITS_PER_SAMPLE_24
+        "32 bit" -> BITS_PER_SAMPLE_32
+        else -> BITS_PER_SAMPLE_24
     }
 
     fun mapBitRate(displayValue: String): Long = when (displayValue) {

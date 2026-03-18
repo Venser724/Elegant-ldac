@@ -1,6 +1,5 @@
 package com.utility.eldac
 
-import android.bluetooth.BluetoothCodecConfig
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -36,74 +35,47 @@ class LdacCodecManagerTest {
 
     @Test
     fun mapSampleRate_44100() {
-        assertEquals(
-            BluetoothCodecConfig.SAMPLE_RATE_44100,
-            manager.mapSampleRate("44.1 kHz")
-        )
+        assertEquals(LdacCodecManager.SAMPLE_RATE_44100, manager.mapSampleRate("44.1 kHz"))
     }
 
     @Test
     fun mapSampleRate_48000() {
-        assertEquals(
-            BluetoothCodecConfig.SAMPLE_RATE_48000,
-            manager.mapSampleRate("48 kHz")
-        )
+        assertEquals(LdacCodecManager.SAMPLE_RATE_48000, manager.mapSampleRate("48 kHz"))
     }
 
     @Test
     fun mapSampleRate_88200() {
-        assertEquals(
-            BluetoothCodecConfig.SAMPLE_RATE_88200,
-            manager.mapSampleRate("88.2 kHz")
-        )
+        assertEquals(LdacCodecManager.SAMPLE_RATE_88200, manager.mapSampleRate("88.2 kHz"))
     }
 
     @Test
     fun mapSampleRate_96000() {
-        assertEquals(
-            BluetoothCodecConfig.SAMPLE_RATE_96000,
-            manager.mapSampleRate("96 kHz")
-        )
+        assertEquals(LdacCodecManager.SAMPLE_RATE_96000, manager.mapSampleRate("96 kHz"))
     }
 
     @Test
     fun mapSampleRate_unknownValue_defaultsTo96000() {
-        assertEquals(
-            BluetoothCodecConfig.SAMPLE_RATE_96000,
-            manager.mapSampleRate("unknown")
-        )
+        assertEquals(LdacCodecManager.SAMPLE_RATE_96000, manager.mapSampleRate("unknown"))
     }
 
     @Test
     fun mapBitsPerSample_16bit() {
-        assertEquals(
-            BluetoothCodecConfig.BITS_PER_SAMPLE_16,
-            manager.mapBitsPerSample("16 bit")
-        )
+        assertEquals(LdacCodecManager.BITS_PER_SAMPLE_16, manager.mapBitsPerSample("16 bit"))
     }
 
     @Test
     fun mapBitsPerSample_24bit() {
-        assertEquals(
-            BluetoothCodecConfig.BITS_PER_SAMPLE_24,
-            manager.mapBitsPerSample("24 bit")
-        )
+        assertEquals(LdacCodecManager.BITS_PER_SAMPLE_24, manager.mapBitsPerSample("24 bit"))
     }
 
     @Test
     fun mapBitsPerSample_32bit() {
-        assertEquals(
-            BluetoothCodecConfig.BITS_PER_SAMPLE_32,
-            manager.mapBitsPerSample("32 bit")
-        )
+        assertEquals(LdacCodecManager.BITS_PER_SAMPLE_32, manager.mapBitsPerSample("32 bit"))
     }
 
     @Test
     fun mapBitsPerSample_unknownValue_defaultsTo24bit() {
-        assertEquals(
-            BluetoothCodecConfig.BITS_PER_SAMPLE_24,
-            manager.mapBitsPerSample("unknown")
-        )
+        assertEquals(LdacCodecManager.BITS_PER_SAMPLE_24, manager.mapBitsPerSample("unknown"))
     }
 
     @Test
@@ -117,5 +89,20 @@ class LdacCodecManagerTest {
     @Test
     fun codecTypeLdac_isFour() {
         assertEquals(4, LdacCodecManager.CODEC_TYPE_LDAC)
+    }
+
+    @Test
+    fun sampleRateConstants_matchBluetoothSpec() {
+        assertEquals(0x01, LdacCodecManager.SAMPLE_RATE_44100)
+        assertEquals(0x02, LdacCodecManager.SAMPLE_RATE_48000)
+        assertEquals(0x04, LdacCodecManager.SAMPLE_RATE_88200)
+        assertEquals(0x08, LdacCodecManager.SAMPLE_RATE_96000)
+    }
+
+    @Test
+    fun bitsPerSampleConstants_matchBluetoothSpec() {
+        assertEquals(0x01, LdacCodecManager.BITS_PER_SAMPLE_16)
+        assertEquals(0x02, LdacCodecManager.BITS_PER_SAMPLE_24)
+        assertEquals(0x04, LdacCodecManager.BITS_PER_SAMPLE_32)
     }
 }
