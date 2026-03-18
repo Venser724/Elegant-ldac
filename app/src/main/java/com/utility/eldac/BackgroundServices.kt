@@ -20,6 +20,9 @@ class BluetoothViewModel(context: Context) : ViewModel(),
     private val _isBluetoothReady = MutableStateFlow(false)
     val isBluetoothReady: StateFlow<Boolean> = _isBluetoothReady.asStateFlow()
 
+    private var connectedDevice: BluetoothDevice? = null
+    private var onDeviceConnectedCallback: (() -> Unit)? = null
+
     init {
         bluetoothHandler.setListener(this)
     }
@@ -32,7 +35,16 @@ class BluetoothViewModel(context: Context) : ViewModel(),
 
     fun hasPermission(): Boolean = bluetoothHandler.hasBluetoothPermission()
 
+    fun getA2dpProxy(): BluetoothA2dp? = bluetoothHandler.getA2dpProxy()
+
+    fun getConnectedDevice(): BluetoothDevice? = connectedDevice
+
+    fun setOnDeviceConnectedCallback(callback: () -> Unit) {
+        onDeviceConnectedCallback = callback
+    }
+
     override fun onDeviceConnected(device: BluetoothDevice) {
+        connectedDevice = device
         val deviceName = try {
             device.name ?: "Unknown Device"
         } catch (e: SecurityException) {
@@ -45,18 +57,26 @@ class BluetoothViewModel(context: Context) : ViewModel(),
             signalStrength = "Good",
             isConnected = true
         )
+        onDeviceConnectedCallback?.invoke()
     }
 
     override fun onDeviceDisconnected() {
+        connectedDevice = null
         _deviceState.value = DeviceState()
+        onDeviceConnectedCallback?.invoke()
     }
 
     override fun onA2dpReady(proxy: BluetoothA2dp) {
         _isBluetoothReady.value = true
+        val device = bluetoothHandler.getConnectedA2dpDevice()
+        if (device != null) {
+            onDeviceConnected(device)
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
+        onDeviceConnectedCallback = null
         bluetoothHandler.release()
     }
 

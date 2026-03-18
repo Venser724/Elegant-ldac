@@ -1,10 +1,16 @@
 package com.utility.eldac
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 data class AudioSettings(
     val bitRate: String = DEFAULT_BIT_RATE,
@@ -25,38 +31,88 @@ data class DeviceState(
     val isConnected: Boolean = false
 )
 
-class AudioSettingsViewModel : ViewModel() {
-    private val _audioSettings = MutableStateFlow(AudioSettings())
-    val audioSettings: StateFlow<AudioSettings> = _audioSettings.asStateFlow()
+sealed class ApplyStatus {
+    data object Idle : ApplyStatus()
+    data object Applying : ApplyStatus()
+    data class Success(val message: String) : ApplyStatus()
+    data class Error(val message: String) : ApplyStatus()
+    data class PermissionRequired(val message: String) : ApplyStatus()
+}
 
-    private val _deviceState = MutableStateFlow(DeviceState())
-    val deviceState: StateFlow<DeviceState> = _deviceState.asStateFlow()
+class AudioSettingsViewModel(
+    private val settingsRepository: SettingsRepository,
+    private val codecManager: LdacCodecManager = LdacCodecManager()
+) : ViewModel() {
+
+    val audioSettings: StateFlow<AudioSettings> = settingsRepository.audioSettings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioSettings())
+
+    private val _applyStatus = MutableStateFlow<ApplyStatus>(ApplyStatus.Idle)
+    val applyStatus: StateFlow<ApplyStatus> = _applyStatus.asStateFlow()
+
+    private val _currentCodecInfo = MutableStateFlow<LdacCodecManager.CurrentCodecInfo?>(null)
+    val currentCodecInfo: StateFlow<LdacCodecManager.CurrentCodecInfo?> =
+        _currentCodecInfo.asStateFlow()
 
     fun selectBitRate(bitRate: String) {
-        _audioSettings.update { it.copy(bitRate = bitRate) }
+        viewModelScope.launch { settingsRepository.saveBitRate(bitRate) }
     }
 
     fun selectBitDepth(bitDepth: String) {
-        _audioSettings.update { it.copy(bitDepth = bitDepth) }
+        viewModelScope.launch { settingsRepository.saveBitDepth(bitDepth) }
     }
 
     fun selectSamplingRate(samplingRate: String) {
-        _audioSettings.update { it.copy(samplingRate = samplingRate) }
+        viewModelScope.launch { settingsRepository.saveSamplingRate(samplingRate) }
     }
 
-    fun updateDeviceState(
-        name: String? = null,
-        batteryLevel: Int? = null,
-        signalStrength: String? = null,
-        isConnected: Boolean? = null
-    ) {
-        _deviceState.update { current ->
-            current.copy(
-                name = name ?: current.name,
-                batteryLevel = batteryLevel ?: current.batteryLevel,
-                signalStrength = signalStrength ?: current.signalStrength,
-                isConnected = isConnected ?: current.isConnected
-            )
+    fun applySettings(bluetoothViewModel: BluetoothViewModel) {
+        val a2dp = bluetoothViewModel.getA2dpProxy()
+        val device = bluetoothViewModel.getConnectedDevice()
+
+        if (a2dp == null || device == null) {
+            _applyStatus.value = ApplyStatus.Error("No Bluetooth device connected")
+            return
+        }
+
+        _applyStatus.value = ApplyStatus.Applying
+        viewModelScope.launch {
+            val result = codecManager.applySettings(a2dp, device, audioSettings.value)
+            _applyStatus.value = when (result) {
+                is LdacCodecManager.Result.Success -> ApplyStatus.Success(result.message)
+                is LdacCodecManager.Result.Error -> ApplyStatus.Error(result.message)
+                is LdacCodecManager.Result.PermissionRequired ->
+                    ApplyStatus.PermissionRequired(result.message)
+            }
+            if (result is LdacCodecManager.Result.Success) {
+                readCurrentCodec(bluetoothViewModel)
+            }
+        }
+    }
+
+    fun readCurrentCodec(bluetoothViewModel: BluetoothViewModel) {
+        val a2dp = bluetoothViewModel.getA2dpProxy()
+        val device = bluetoothViewModel.getConnectedDevice()
+        if (a2dp != null && device != null) {
+            _currentCodecInfo.value = codecManager.readCurrentCodec(a2dp, device)
+        } else {
+            _currentCodecInfo.value = null
+        }
+    }
+
+    fun clearApplyStatus() {
+        _applyStatus.value = ApplyStatus.Idle
+    }
+
+    class Factory(private val context: Context) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(AudioSettingsViewModel::class.java)) {
+                return AudioSettingsViewModel(
+                    settingsRepository = SettingsRepository(context.applicationContext)
+                ) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
     }
 }
