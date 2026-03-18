@@ -1,8 +1,14 @@
 package com.utility.eldac
 
+import android.Manifest
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,11 +17,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -25,69 +34,190 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.utility.eldac.ui.theme.Black
+import androidx.lifecycle.ViewModelProvider
 import com.utility.eldac.ui.theme.Blue10
 import com.utility.eldac.ui.theme.Blue30
 import com.utility.eldac.ui.theme.Blue60
 import com.utility.eldac.ui.theme.Blue80
-
+import com.utility.eldac.ui.theme.Black
+import com.utility.eldac.ui.theme.ElegantLDACTheme
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var bluetoothViewModel: BluetoothViewModel
+    private lateinit var audioViewModel: AudioSettingsViewModel
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            bluetoothViewModel.initialize()
+        }
+    }
+
+    private val associationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) {
+        bluetoothViewModel.refreshAssociationState()
+        audioViewModel.clearApplyStatus()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        bluetoothViewModel = ViewModelProvider(
+            this,
+            BluetoothViewModel.Factory(applicationContext)
+        )[BluetoothViewModel::class.java]
+
+        audioViewModel = ViewModelProvider(
+            this,
+            AudioSettingsViewModel.Factory(applicationContext)
+        )[AudioSettingsViewModel::class.java]
+
+        bluetoothViewModel.setOnDeviceConnectedCallback {
+            audioViewModel.readCurrentCodec(bluetoothViewModel)
+        }
+
+        requestBluetoothPermission()
+
         setContent {
-            ScaffoldBG()
+            ElegantLDACTheme {
+                EldacApp(
+                    audioViewModel = audioViewModel,
+                    bluetoothViewModel = bluetoothViewModel,
+                    onAssociateDevice = {
+                        bluetoothViewModel.requestAssociation(
+                            onIntentSender = { sender ->
+                                associationLauncher.launch(
+                                    IntentSenderRequest.Builder(sender).build()
+                                )
+                            },
+                            onError = { /* handled via snackbar */ }
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    private fun requestBluetoothPermission() {
+        if (bluetoothViewModel.hasPermission()) {
+            bluetoothViewModel.initialize()
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
         }
     }
 }
 
-
 @OptIn(ExperimentalMaterial3Api::class)
-@Preview(showBackground = true)
 @Composable
-fun ScaffoldBG() {
+fun EldacApp(
+    audioViewModel: AudioSettingsViewModel,
+    bluetoothViewModel: BluetoothViewModel,
+    onAssociateDevice: () -> Unit = {}
+) {
+    val isAssociated by bluetoothViewModel.isAssociated.collectAsState()
+    val audioSettings by audioViewModel.audioSettings.collectAsState()
+    val deviceState by bluetoothViewModel.deviceState.collectAsState()
+    val applyStatus by audioViewModel.applyStatus.collectAsState()
+    val codecInfo by audioViewModel.currentCodecInfo.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(applyStatus) {
+        when (val status = applyStatus) {
+            is ApplyStatus.Success -> {
+                snackbarHostState.showSnackbar(status.message)
+                audioViewModel.clearApplyStatus()
+            }
+            is ApplyStatus.Error -> {
+                snackbarHostState.showSnackbar(status.message)
+                audioViewModel.clearApplyStatus()
+            }
+            else -> { }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("LDAC Settings") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Blue80,
-                    titleContentColor = Color.White // Recommended for contrast
-
+                    titleContentColor = Color.White
                 )
             )
         },
-        // The content lambda for the official Scaffold provides padding values
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         content = { paddingValues ->
-            // Apply the padding to your content's root Column
             Column(
                 modifier = Modifier
-                    .fillMaxSize() // Fill the available space
-                    .padding(paddingValues) // Use the padding from the Scaffold
-                    .background(Blue10) // I see AppBg in your theme imports
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .background(Blue10)
+                    .verticalScroll(rememberScrollState())
             ) {
-                DeviceHeaderCard()
-                AudioParametersCard()
-                //PresetsCard()
+                DeviceHeaderCard(
+                    deviceState = deviceState,
+                    codecInfo = codecInfo
+                )
+                AudioParametersCard(
+                    audioSettings = audioSettings,
+                    onBitRateSelected = audioViewModel::selectBitRate,
+                    onBitDepthSelected = audioViewModel::selectBitDepth,
+                    onSamplingRateSelected = audioViewModel::selectSamplingRate
+                )
+                if (deviceState.isConnected && !isAssociated) {
+                    AssociateDeviceButton(onAssociate = onAssociateDevice)
+                }
+                ApplySettingsButton(
+                    isConnected = deviceState.isConnected,
+                    isAssociated = isAssociated,
+                    isApplying = applyStatus is ApplyStatus.Applying,
+                    onApply = { audioViewModel.applySettings(bluetoothViewModel) }
+                )
+                val failedStatus = applyStatus as? ApplyStatus.Failed
+                if (failedStatus != null) {
+                    DiagnosticCard(
+                        diagnostic = failedStatus.diagnostic,
+                        onOpenDevOptions = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+                            )
+                        },
+                        onDismiss = { audioViewModel.clearApplyStatus() }
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     )
 }
 
 @Composable
-fun DeviceHeaderCard() {
+fun DeviceHeaderCard(
+    deviceState: DeviceState,
+    codecInfo: LdacCodecManager.CurrentCodecInfo?
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -109,25 +239,18 @@ fun DeviceHeaderCard() {
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Connected Device",
+                        if (deviceState.isConnected) "Connected Device" else "No Device",
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 14.sp
                     )
                     Text(
-                        text = BackgroundServices.deviceName,
+                        text = deviceState.name,
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )
                 }
-                Button(
-                    onClick = { /*TODO*/ },
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    Text("Connected", color = Color.White)
-                }
+                StatusBadge(isConnected = deviceState.isConnected)
             }
             HorizontalDivider(
                 color = Color.White.copy(alpha = 0.2f),
@@ -142,25 +265,121 @@ fun DeviceHeaderCard() {
                         fontSize = 14.sp
                     )
                     Text(
-                        text = BackgroundServices.signalLvl,
+                        text = deviceState.signalStrength,
                         color = Color.White,
-                        fontWeight = FontWeight.SemiBold)
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Battery", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-                    Text(text = "${BackgroundServices.deviceBatteryLvl} %", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Battery",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = if (deviceState.isConnected) "${deviceState.batteryLevel} %" else "N/A",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            if (codecInfo != null) {
+                HorizontalDivider(
+                    color = Color.White.copy(alpha = 0.2f),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+                Text(
+                    "Active Codec",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Codec",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            codecInfo.codecName,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Bit Rate",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            codecInfo.bitRate,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Sample Rate",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            codecInfo.sampleRate,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Bit Depth",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            codecInfo.bitsPerSample,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+@Composable
+fun StatusBadge(isConnected: Boolean) {
+    Button(
+        onClick = { },
+        enabled = false,
+        shape = RoundedCornerShape(50),
+        colors = ButtonDefaults.buttonColors(
+            disabledContainerColor = if (isConnected) {
+                Color.White.copy(alpha = 0.2f)
+            } else {
+                Color.Red.copy(alpha = 0.3f)
+            },
+            disabledContentColor = Color.White
+        ),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Text(if (isConnected) "Connected" else "Disconnected")
+    }
+}
 
 @Composable
-fun AudioParametersCard() {
-
-
-
+fun AudioParametersCard(
+    audioSettings: AudioSettings,
+    onBitRateSelected: (String) -> Unit,
+    onBitDepthSelected: (String) -> Unit,
+    onSamplingRateSelected: (String) -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -168,9 +387,11 @@ fun AudioParametersCard() {
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
     ) {
-        Row(modifier = Modifier
-            .fillMaxWidth()
-            .padding(12.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_settings),
                 contentDescription = "Audio Icon",
@@ -179,23 +400,19 @@ fun AudioParametersCard() {
                     .size(36.dp)
                     .padding(8.dp)
             )
-            Column(modifier = Modifier.weight(1f),
-                ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "Audio Parameters",
                     color = Color.Black,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .padding(start = 8.dp),
+                    modifier = Modifier.padding(start = 8.dp),
                 )
                 Text(
                     "Configure LDAC audio settings",
                     color = Color.Gray,
                     fontSize = 12.sp,
-                    modifier = Modifier
-                        .padding(start = 8.dp)
-
+                    modifier = Modifier.padding(start = 8.dp)
                 )
             }
         }
@@ -203,11 +420,11 @@ fun AudioParametersCard() {
             modifier = Modifier.padding(all = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            LdacBitrateSelectionGroup(
-                label = "Bit rate",
+            LdacSelectionGroup(
+                label = "Bit Rate",
                 options = listOf("330 kbps", "660 kbps", "990 kbps"),
-                selectedOption = "",
-                onOptionSelected = { /* Handle selection */ }
+                selectedOption = audioSettings.bitRate,
+                onOptionSelected = onBitRateSelected
             )
         }
         HorizontalDivider(
@@ -219,29 +436,191 @@ fun AudioParametersCard() {
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-
             LdacSelectionGroup(
                 label = "Bit Depth",
                 options = listOf("16 bit", "24 bit", "32 bit"),
-                selectedOption = "",
-                onOptionSelected = { /* Handle selection */ })
+                selectedOption = audioSettings.bitDepth,
+                onOptionSelected = onBitDepthSelected
+            )
         }
         HorizontalDivider(
-            modifier = Modifier.padding(vertical = 16.dp),
+            modifier = Modifier.padding(vertical = 12.dp),
             thickness = 1.dp,
             color = Color.Gray.copy(alpha = 0.3f)
         )
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            LdacSamplingRateSelectionGroup(
+            LdacSelectionGroup(
                 label = "Sampling Rate",
                 options = listOf("44.1 kHz", "48 kHz", "88.2 kHz", "96 kHz"),
-                selectedOption = "",
-                onOptionSelected = { /* Handle selection */ })
+                selectedOption = audioSettings.samplingRate,
+                onOptionSelected = onSamplingRateSelected
+            )
         }
+    }
+}
 
+@Composable
+fun AssociateDeviceButton(onAssociate: () -> Unit) {
+    Button(
+        onClick = onAssociate,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Blue60,
+            contentColor = Color.White
+        ),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+        Text(
+            text = "Associate Device (required to change codec)",
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
+        )
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+}
+
+@Composable
+fun ApplySettingsButton(
+    isConnected: Boolean,
+    isAssociated: Boolean,
+    isApplying: Boolean,
+    onApply: () -> Unit
+) {
+    Button(
+        onClick = onApply,
+        enabled = isConnected && isAssociated && !isApplying,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Blue80,
+            contentColor = Color.White,
+            disabledContainerColor = Blue80.copy(alpha = 0.4f),
+            disabledContentColor = Color.White.copy(alpha = 0.5f)
+        ),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+        Text(
+            text = when {
+                isApplying -> "Applying..."
+                !isConnected -> "Connect a device to apply"
+                !isAssociated -> "Associate device first"
+                else -> "Apply LDAC Settings"
+            },
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp
+        )
+    }
+}
+
+@Composable
+fun DiagnosticCard(
+    diagnostic: DiagnosticInfo,
+    onOpenDevOptions: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(all = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Settings not applied",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = Color(0xFFE65100)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            DiagRow("Device", diagnostic.deviceName)
+            DiagRow("Active Device", if (diagnostic.isActiveDevice) "Yes" else "No")
+            DiagRow("CDM Associated", if (diagnostic.isAssociated) "Yes" else "No")
+            DiagRow("API Call", diagnostic.apiCallResult)
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Requested:",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp
+            )
+            DiagRow("  Codec", "LDAC")
+            DiagRow("  Bit Rate", diagnostic.requested.bitRate)
+            DiagRow("  Bit Depth", diagnostic.requested.bitDepth)
+            DiagRow("  Sample Rate", diagnostic.requested.samplingRate)
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Actual (after apply):",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp
+            )
+            val actual = diagnostic.actualCodec
+            if (actual != null) {
+                DiagRow("  Codec", actual.codecName)
+                DiagRow("  Bit Rate", actual.bitRate)
+                DiagRow("  Bit Depth", actual.bitsPerSample)
+                DiagRow("  Sample Rate", actual.sampleRate)
+            } else {
+                DiagRow("  Read Error", diagnostic.codecReadError ?: "unknown")
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                "The API call returned OK but the system ignored the change. " +
+                        "This typically means BLUETOOTH_PRIVILEGED was not granted " +
+                        "despite CDM association. Try changing codec manually in " +
+                        "Developer Options > Bluetooth Audio Codec.",
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onOpenDevOptions,
+                    colors = ButtonDefaults.buttonColors(containerColor = Blue60),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Open Dev Options")
+                }
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Gray.copy(alpha = 0.3f),
+                        contentColor = Color.Black
+                    ),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Dismiss")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DiagRow(label: String, value: String) {
+    Row(modifier = Modifier.padding(vertical = 2.dp)) {
+        Text(
+            label,
+            fontSize = 13.sp,
+            color = Color.Gray,
+            modifier = Modifier.width(120.dp)
+        )
+        Text(
+            value,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
@@ -254,65 +633,10 @@ fun LdacSelectionGroup(
 ) {
     Column {
         Text(label, style = MaterialTheme.typography.labelMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            options.forEach { option ->
-                var isSelected = option == selectedOption
-                Button(
-                    onClick = { onOptionSelected(option) },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isSelected) Blue60 else Blue30,
-                        contentColor = if (isSelected) Color.White else Black
-                    ),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(option)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun LdacBitrateSelectionGroup(
-    label: String,
-    options: List<String>,
-    selectedOption: String,
-    onOptionSelected: () -> Unit
-) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { option ->
                 val isSelected = option == selectedOption
                 Button(
-                    onClick = { onOptionSelected() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isSelected) Blue60 else Blue30,
-                        contentColor = if (isSelected) Color.White else Black
-                    ),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(option)
-                }
-            }
-        }
-    }
-
-}
-
-@Composable
-fun LdacSamplingRateSelectionGroup(
-    label: String,
-    options: List<String>,
-    selectedOption: String,
-    onOptionSelected: (String) -> Unit
-) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            options.forEach { option ->
-                val isSelected = option == selectedOption
-                Button(
                     onClick = { onOptionSelected(option) },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isSelected) Blue60 else Blue30,
@@ -326,4 +650,3 @@ fun LdacSamplingRateSelectionGroup(
         }
     }
 }
-
