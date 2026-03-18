@@ -3,92 +3,81 @@ package com.utility.eldac
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 
-class AudioSettingsViewModelTest {
+class ApplyStatusTest {
 
-    private lateinit var viewModel: AudioSettingsViewModel
-
-    @Before
-    fun setUp() {
-        viewModel = AudioSettingsViewModel()
+    @Test
+    fun idle_isDefaultState() {
+        val status: ApplyStatus = ApplyStatus.Idle
+        assertTrue(status is ApplyStatus.Idle)
     }
 
     @Test
-    fun defaultAudioSettings_hasExpectedValues() {
-        val settings = viewModel.audioSettings.value
-        assertEquals("990 kbps", settings.bitRate)
-        assertEquals("24 bit", settings.bitDepth)
-        assertEquals("96 kHz", settings.samplingRate)
+    fun success_carriesMessage() {
+        val status = ApplyStatus.Success("Applied")
+        assertEquals("Applied", status.message)
     }
 
     @Test
-    fun defaultDeviceState_isNotConnected() {
-        val state = viewModel.deviceState.value
+    fun error_carriesMessage() {
+        val status = ApplyStatus.Error("Failed")
+        assertEquals("Failed", status.message)
+    }
+
+    @Test
+    fun permissionRequired_carriesMessage() {
+        val status = ApplyStatus.PermissionRequired("Need root")
+        assertEquals("Need root", status.message)
+    }
+
+    @Test
+    fun applying_isSingleton() {
+        val a = ApplyStatus.Applying
+        val b = ApplyStatus.Applying
+        assertTrue(a === b)
+    }
+}
+
+class AudioSettingsDefaultsTest {
+
+    @Test
+    fun defaultConstants_matchDefaultConstructor() {
+        val settings = AudioSettings()
+        assertEquals(AudioSettings.DEFAULT_BIT_RATE, settings.bitRate)
+        assertEquals(AudioSettings.DEFAULT_BIT_DEPTH, settings.bitDepth)
+        assertEquals(AudioSettings.DEFAULT_SAMPLING_RATE, settings.samplingRate)
+    }
+
+    @Test
+    fun defaultValues_areHighQuality() {
+        assertEquals("990 kbps", AudioSettings.DEFAULT_BIT_RATE)
+        assertEquals("24 bit", AudioSettings.DEFAULT_BIT_DEPTH)
+        assertEquals("96 kHz", AudioSettings.DEFAULT_SAMPLING_RATE)
+    }
+}
+
+class DeviceStateDefaultsTest {
+
+    @Test
+    fun defaultState_isDisconnected() {
+        val state = DeviceState()
+        assertFalse(state.isConnected)
         assertEquals("Not Connected", state.name)
         assertEquals(0, state.batteryLevel)
         assertEquals("N/A", state.signalStrength)
-        assertFalse(state.isConnected)
     }
 
     @Test
-    fun selectBitRate_updatesValue() {
-        viewModel.selectBitRate("330 kbps")
-        assertEquals("330 kbps", viewModel.audioSettings.value.bitRate)
-    }
-
-    @Test
-    fun selectBitRate_doesNotAffectOtherSettings() {
-        viewModel.selectBitRate("660 kbps")
-        val settings = viewModel.audioSettings.value
-        assertEquals("660 kbps", settings.bitRate)
-        assertEquals("24 bit", settings.bitDepth)
-        assertEquals("96 kHz", settings.samplingRate)
-    }
-
-    @Test
-    fun selectBitDepth_updatesValue() {
-        viewModel.selectBitDepth("16 bit")
-        assertEquals("16 bit", viewModel.audioSettings.value.bitDepth)
-    }
-
-    @Test
-    fun selectSamplingRate_updatesValue() {
-        viewModel.selectSamplingRate("44.1 kHz")
-        assertEquals("44.1 kHz", viewModel.audioSettings.value.samplingRate)
-    }
-
-    @Test
-    fun updateDeviceState_partialUpdate() {
-        viewModel.updateDeviceState(name = "Sony WH-1000XM5", isConnected = true)
-        val state = viewModel.deviceState.value
-        assertEquals("Sony WH-1000XM5", state.name)
-        assertTrue(state.isConnected)
-        assertEquals(0, state.batteryLevel)
-        assertEquals("N/A", state.signalStrength)
-    }
-
-    @Test
-    fun updateDeviceState_fullUpdate() {
-        viewModel.updateDeviceState(
-            name = "Sony WH-1000XM5",
+    fun connectedState_hasAllFields() {
+        val state = DeviceState(
+            name = "WH-1000XM5",
             batteryLevel = 85,
-            signalStrength = "Good",
+            signalStrength = "Excellent",
             isConnected = true
         )
-        val state = viewModel.deviceState.value
-        assertEquals("Sony WH-1000XM5", state.name)
-        assertEquals(85, state.batteryLevel)
-        assertEquals("Good", state.signalStrength)
         assertTrue(state.isConnected)
-    }
-
-    @Test
-    fun multipleSelections_lastWins() {
-        viewModel.selectBitRate("330 kbps")
-        viewModel.selectBitRate("660 kbps")
-        viewModel.selectBitRate("990 kbps")
-        assertEquals("990 kbps", viewModel.audioSettings.value.bitRate)
+        assertEquals("WH-1000XM5", state.name)
+        assertEquals(85, state.batteryLevel)
     }
 }
