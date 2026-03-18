@@ -543,6 +543,7 @@ fun DiagnosticCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             DiagRow("Device", diagnostic.deviceName)
+            DiagRow("Active Device", if (diagnostic.isActiveDevice) "Yes" else "No")
             DiagRow("CDM Associated", if (diagnostic.isAssociated) "Yes" else "No")
             DiagRow("API Call", diagnostic.apiCallResult)
 

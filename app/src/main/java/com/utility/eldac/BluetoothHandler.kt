@@ -118,8 +118,17 @@ class BluetoothHandler(private val context: Context) {
         if (!hasBluetoothPermission()) return null
 
         return try {
-            a2dpProxy?.connectedDevices?.firstOrNull()
+            getActiveDevice() ?: a2dpProxy?.connectedDevices?.firstOrNull()
         } catch (e: SecurityException) {
+            null
+        }
+    }
+
+    fun getActiveDevice(): BluetoothDevice? {
+        return try {
+            val method = BluetoothA2dp::class.java.getMethod("getActiveDevice")
+            method.invoke(a2dpProxy) as? BluetoothDevice
+        } catch (e: Exception) {
             null
         }
     }

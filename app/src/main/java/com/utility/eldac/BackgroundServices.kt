@@ -59,6 +59,12 @@ class BluetoothViewModel(context: Context) : ViewModel(),
 
     fun getConnectedDevice(): BluetoothDevice? = connectedDevice
 
+    fun isActiveDevice(): Boolean {
+        val active = bluetoothHandler.getActiveDevice()
+        return active != null && connectedDevice != null &&
+            active.address == connectedDevice?.address
+    }
+
     fun setOnDeviceConnectedCallback(callback: () -> Unit) {
         onDeviceConnectedCallback = callback
     }

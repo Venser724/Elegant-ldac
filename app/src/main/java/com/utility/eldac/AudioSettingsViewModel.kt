@@ -36,7 +36,8 @@ data class DiagnosticInfo(
     val actualCodec: LdacCodecManager.CurrentCodecInfo?,
     val apiCallResult: String,
     val isAssociated: Boolean,
-    val deviceName: String
+    val deviceName: String,
+    val isActiveDevice: Boolean = false
 )
 
 sealed class ApplyStatus {
@@ -86,6 +87,7 @@ class AudioSettingsViewModel(
         val desired = audioSettings.value
         val isAssociated = bluetoothViewModel.isAssociated.value
         val deviceName = bluetoothViewModel.deviceState.value.name
+        val isActiveDevice = bluetoothViewModel.isActiveDevice()
 
         _applyStatus.value = ApplyStatus.Applying
         viewModelScope.launch {
@@ -113,7 +115,8 @@ class AudioSettingsViewModel(
                         actualCodec = actualCodec,
                         apiCallResult = apiCallResult,
                         isAssociated = isAssociated,
-                        deviceName = deviceName
+                        deviceName = deviceName,
+                        isActiveDevice = isActiveDevice
                     )
                 )
             }
