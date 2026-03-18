@@ -7,10 +7,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 data class AudioSettings(
-    val bitRate: String = "990 kbps",
-    val bitDepth: String = "24 bit",
-    val samplingRate: String = "96 kHz"
-)
+    val bitRate: String = DEFAULT_BIT_RATE,
+    val bitDepth: String = DEFAULT_BIT_DEPTH,
+    val samplingRate: String = DEFAULT_SAMPLING_RATE
+) {
+    companion object {
+        const val DEFAULT_BIT_RATE = "990 kbps"
+        const val DEFAULT_BIT_DEPTH = "24 bit"
+        const val DEFAULT_SAMPLING_RATE = "96 kHz"
+    }
+}
 
 data class DeviceState(
     val name: String = "Not Connected",
